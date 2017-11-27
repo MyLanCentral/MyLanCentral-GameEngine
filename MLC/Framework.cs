@@ -87,7 +87,7 @@ namespace Mylancentral {
                 Rectangle rect;
                 Point position, size;
 
-                position = new Point((int)Position.X, (int)Position.Y);
+                position = new Point((int)Position.X - (int)Origin.X, (int)Position.Y - (int)Origin.X);
                 size = new Point(Texture.Width, Texture.Height);
 
                 rect = new Rectangle(position, size);
@@ -116,6 +116,8 @@ namespace Mylancentral {
                 Position = Position + Velocity;
 
                 Velocity = new Vector2(0);
+
+                BoundaryBox = CreateCollisionRectangle();
             }
 
             /// <summary>
@@ -1089,6 +1091,16 @@ namespace Mylancentral {
         namespace ScreenEngine {
             
             public class ScreenController {
+                /* Enums */
+                public enum ScrollType {
+                    Right,
+                    Left,
+                    Up,
+                    Down,
+                    None
+                }
+                
+                /* Members */
                 public readonly SpriteBatch SC_SpriteBatch;
                 public readonly ContentManager SC_Contentmanager;
                 private Action onGameExit;
@@ -1127,8 +1139,7 @@ namespace Mylancentral {
                 public void ChangeBetweenScreens() {
                     
                 }
-
-
+                
                 public void ChangeScreen(IScreen screen) {
                     RemoveAllScreens();
 
@@ -1136,8 +1147,7 @@ namespace Mylancentral {
 
                     screen.Initialize();
                 }
-
-
+                
                 public void PushScreen(IScreen screen) {
                     if (!IsScreenListEmpty) {
                         IScreen curScreen = (IScreen)GetCurrentScreen();
@@ -1148,8 +1158,7 @@ namespace Mylancentral {
 
                     screen.Initialize();
                 }
-
-
+                
                 public void PopScreen() {
                     if (!IsScreenListEmpty) {
                         RemoveCurrentScreen();
@@ -1160,8 +1169,7 @@ namespace Mylancentral {
                         screen.Resume();
                     }
                 }
-
-
+                
                 public void Update(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
                         IScreen screen = GetCurrentScreen();
@@ -1171,8 +1179,7 @@ namespace Mylancentral {
                         }
                     }
                 }
-
-
+                
                 public void Draw(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
                         IScreen screen = GetCurrentScreen();
@@ -1186,8 +1193,7 @@ namespace Mylancentral {
                         SC_SpriteBatch.End();
                     }
                 }
-
-
+                
                 public void HandleInput(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
                         IScreen screen = GetCurrentScreen();
@@ -1198,18 +1204,41 @@ namespace Mylancentral {
                     }
                 }
                 
-
                 public void Exit() {
                     if (onGameExit != null) {
                         onGameExit();
                     }
                 }
-
-
+                
                 public void Dispose() {
                     RemoveAllScreens();
                 }
                 
+                public static Vector2 GetScrollVector(ScrollType scroll, float scroll_rate) {
+                    Vector2 scroll_vector = new Vector2(0);
+
+                    switch (scroll) {
+                        case ScrollType.Right: {
+                                scroll_vector = new Vector2(scroll_rate, 0);
+                                break;
+                            }
+                        case ScrollType.Left: {
+                                scroll_vector = new Vector2(-scroll_rate, 0);
+                                break;
+                            }
+                        case ScrollType.Up: {
+                                scroll_vector = new Vector2(0, -scroll_rate);
+                                break;
+                            }
+                        case ScrollType.Down: {
+                                scroll_vector = new Vector2(0, scroll_rate);
+                                break;
+                            }
+                    }
+
+                    return scroll_vector;
+                }
+
                 public event Action OnGameExit {
                     add { onGameExit += value; }
                     remove { onGameExit -= value; }
@@ -1287,117 +1316,6 @@ namespace Mylancentral {
                     }
                 }
             }
-            /*public class GameScreen : Screen, IScreen {
-                public GameScreen(SpriteBatch spriteBatch, ContentManager content) {
-
-
-                    Initialize();
-                }
-
-                public void Dispose() {
-                    
-                }
-
-                public void Update(GameTime gameTime) {
-                    
-                }
-
-                public void Draw(SpriteBatch spriteBatch) {
-                    
-                }
-
-                public void Initialize() {
-                    
-                }
-
-                public void HandleInput(GameTime gameTime) {
-
-                }
-            }
-            public class PauseScreen : Screen, IScreen {
-                public void Dispose() {
-
-                }
-
-                public void Update(GameTime gameTime) {
-
-                }
-
-                public void Draw(SpriteBatch spriteBatch) {
-
-                }
-
-                public void Initialize() {
-
-                }
-
-                public void HandleInput(GameTime gameTime) {
-
-                }
-            }
-            public class SplashScreen : Screen, IScreen {
-                public void Dispose() {
-
-                }
-
-                public void Update(GameTime gameTime) {
-
-                }
-
-                public void Draw(SpriteBatch spriteBatch) {
-
-                }
-
-                public void Initialize() {
-
-                }
-
-                public void HandleInput(GameTime gameTime) {
-
-                }
-            }
-            public class OptionScreen : Screen, IScreen {
-                public void Dispose() {
-
-                }
-
-                public void Update(GameTime gameTime) {
-
-                }
-
-                public void Draw(SpriteBatch spriteBatch) {
-
-                }
-
-                public void Initialize() {
-
-                }
-
-                public void HandleInput(GameTime gameTime) {
-
-                }
-            }
-            public class TitleScreen : Screen, IScreen {
-                public void Dispose() {
-
-                }
-
-                public void Update(GameTime gameTime) {
-
-                }
-
-                public void Draw(SpriteBatch spriteBatch) {
-
-                }
-
-                public void Initialize() {
-
-                }
-
-                public void HandleInput(GameTime gameTime) {
-
-                }
-            }*/
 
             public interface IScreenElement : IDisposable {
                 void Initialize();
@@ -1550,22 +1468,114 @@ namespace Mylancentral {
                 }
             }
             public class TextureElement : ScreenElement, IScreenElement {
+                private Texture2D Texture { get; set; }
+                private ScreenController.ScrollType Scroll { get; set; }
+                private float ScrollRate { get; set; }
+                private Vector2 Velocity { get; set; }
+                private Vector2 ScrollbackPosition { get; set; }
+                private Vector2 DisplaySize { get; set; }
 
+                public TextureElement(int id, Texture2D texture, Vector2 position) {
+                    ID = id;
+                    Texture = texture;
+                    Position = position;
+                    Scroll = ScreenController.ScrollType.None;
+                    ScrollRate = 0f;
 
+                    Initialize();
+                }
+
+                public TextureElement(int id, Texture2D texture, Vector2 position, ScreenController.ScrollType scroll, float scroll_speed, Vector2 displaysize) {
+                    ID = id;
+                    Texture = texture;
+                    Position = position;
+                    Scroll = scroll;
+                    ScrollRate = scroll_speed;
+                    DisplaySize = displaysize;
+
+                    Initialize();
+                }
+
+                /* Base Methods */
                 public void Initialize() {
+                    Velocity = new Vector2(0);
+                    ScrollbackPosition = SetScrollbackVector();
                 }
 
                 public void Update(GameTime gameTime) {
                     ProcessTimers(gameTime);
 
+                    Velocity = ScreenController.GetScrollVector(Scroll, ScrollRate);
+                    Position = Position + Velocity;
+                    Velocity = new Vector2(0);
+
+                    if(Scroll != ScreenController.ScrollType.None) {
+                        switch (Scroll) {
+                            case ScreenController.ScrollType.Left: {
+                                    if (Position.X <= -DisplaySize.X) {
+                                        Position = new Vector2(0);
+                                    }
+                                    break;
+                                }
+                            case ScreenController.ScrollType.Right: {
+                                    if (Position.X >= DisplaySize.X) {
+                                        Position = new Vector2(0);
+                                    }
+                                    break;
+                                }
+                            case ScreenController.ScrollType.Up: {
+                                    if (Position.Y <= -DisplaySize.Y) {
+                                        Position = new Vector2(0);
+                                    }
+                                    break;
+                                }
+                            case ScreenController.ScrollType.Down: {
+                                    if (Position.Y >= DisplaySize.Y) {
+                                        Position = new Vector2(0);
+                                    }
+                                    break;
+                                }
+                        }
+
+                        ScrollbackPosition = SetScrollbackVector();
+                    }
                 }
 
                 public void Draw(SpriteBatch spriteBatch) {
-
+                    spriteBatch.Draw(Texture, Position, Color.White);
+                    spriteBatch.Draw(Texture, ScrollbackPosition, Color.White);
                 }
 
                 public void Dispose() {
 
+                }
+
+                /* Methods */
+                private Vector2 SetScrollbackVector() {
+                    Vector2 scrollback = new Vector2(0);
+
+                    switch (Scroll) {
+                        case ScreenController.ScrollType.Left: {
+                                scrollback = new Vector2(-DisplaySize.X, 0);
+                                break;
+                            }
+                        case ScreenController.ScrollType.Right: {
+                                scrollback = new Vector2(DisplaySize.X, 0);
+                                break;
+                            }
+                        case ScreenController.ScrollType.Up: {
+                                scrollback = new Vector2(0, DisplaySize.Y);
+                                break;
+                            }
+                        case ScreenController.ScrollType.Down: {
+                                scrollback = new Vector2(0, -DisplaySize.Y);
+                                break;
+                            }
+                    }
+
+                    scrollback = Position + scrollback;
+
+                    return scrollback;
                 }
             }
             public class SoundElement : ScreenElement, IScreenElement {
