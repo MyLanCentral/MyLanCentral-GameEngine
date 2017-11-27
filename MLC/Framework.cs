@@ -87,7 +87,7 @@ namespace Mylancentral {
                 Rectangle rect;
                 Point position, size;
 
-                position = new Point((int)Position.X - (int)Origin.X, (int)Position.Y - (int)Origin.X);
+                position = new Point((int)Position.X - (int)Origin.X, (int)Position.Y - (int)Origin.Y);
                 size = new Point(Texture.Width, Texture.Height);
 
                 rect = new Rectangle(position, size);
