@@ -1,17 +1,19 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Text;
 using System.Collections.Generic;
+using System.Xml.Linq;
+using System.Xml;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Content;
-using System;
 
 namespace Mylancentral {
     namespace Framework {
         /* Framework Members and Methods */
         public static class Methods {
-            public static int FirstAvailableID(List<int> current_ids) {
+            /*public static int FirstAvailableID(List<int> current_ids) {
                 List<int> current, expected;
                 IEnumerable<int> missing;
 
@@ -20,6 +22,36 @@ namespace Mylancentral {
 
                 if (current.Count <= 0) {
                     return 0;
+                }
+
+                for (int i = 0; i < current.Count; i++) {
+                    expected.Add(i);
+                }
+
+                missing = expected.Except(current);
+
+                if (missing.Count() > 0) {
+                    return missing.ElementAt(0);
+                }
+                else {
+                    return current.Count;
+                }
+            }*/
+
+            public static int FirstAvailableID(IEnumerable<Entity> entity_list) {
+                List<int> current, expected;
+                IEnumerable<int> missing;
+
+                current = new List<int>();
+                expected = new List<int>();
+
+                if (current.Count <= 0) {
+                    return 0;
+                }
+                else {
+                    foreach(Entity entity in entity_list) {
+                        current.Add(entity.ID);
+                    }
                 }
 
                 for (int i = 0; i < current.Count; i++) {
@@ -133,6 +165,17 @@ namespace Mylancentral {
             void Update(GameTime gameTime);
             void Draw(SpriteBatch spriteBatch);
         }
+
+        namespace SaveLoad {
+            public abstract class SaveFile {
+
+            }
+            public interface ISaveFile {
+
+            }
+        }
+
+
 
         /// <summary>
         /// Derivative Libary of Controls and Classes
@@ -1117,11 +1160,9 @@ namespace Mylancentral {
                         return GameScreens.Count <= 0;
                     }
                 }
-
                 private IScreen GetCurrentScreen() {
                     return GameScreens.ElementAt(GameScreens.Count - 1);
                 }
-
                 private void RemoveCurrentScreen() {
                     IScreen screen = (IScreen)GetCurrentScreen();
 
@@ -1129,17 +1170,14 @@ namespace Mylancentral {
 
                     GameScreens.Remove(screen);
                 }
-
                 private void RemoveAllScreens() {
                     while (!IsScreenListEmpty) {
                         RemoveCurrentScreen();
                     }
                 }
-
                 public void ChangeBetweenScreens() {
                     
                 }
-                
                 public void ChangeScreen(IScreen screen) {
                     RemoveAllScreens();
 
@@ -1147,7 +1185,6 @@ namespace Mylancentral {
 
                     screen.Initialize();
                 }
-                
                 public void PushScreen(IScreen screen) {
                     if (!IsScreenListEmpty) {
                         IScreen curScreen = (IScreen)GetCurrentScreen();
@@ -1158,7 +1195,6 @@ namespace Mylancentral {
 
                     screen.Initialize();
                 }
-                
                 public void PopScreen() {
                     if (!IsScreenListEmpty) {
                         RemoveCurrentScreen();
@@ -1169,7 +1205,6 @@ namespace Mylancentral {
                         screen.Resume();
                     }
                 }
-                
                 public void Update(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
                         IScreen screen = GetCurrentScreen();
@@ -1179,7 +1214,6 @@ namespace Mylancentral {
                         }
                     }
                 }
-                
                 public void Draw(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
                         IScreen screen = GetCurrentScreen();
@@ -1193,7 +1227,6 @@ namespace Mylancentral {
                         SC_SpriteBatch.End();
                     }
                 }
-                
                 public void HandleInput(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
                         IScreen screen = GetCurrentScreen();
@@ -1203,17 +1236,14 @@ namespace Mylancentral {
                         }
                     }
                 }
-                
                 public void Exit() {
                     if (onGameExit != null) {
                         onGameExit();
                     }
                 }
-                
                 public void Dispose() {
                     RemoveAllScreens();
                 }
-                
                 public static Vector2 GetScrollVector(ScrollType scroll, float scroll_rate) {
                     Vector2 scroll_vector = new Vector2(0);
 
@@ -1238,7 +1268,6 @@ namespace Mylancentral {
 
                     return scroll_vector;
                 }
-
                 public event Action OnGameExit {
                     add { onGameExit += value; }
                     remove { onGameExit -= value; }
@@ -1474,6 +1503,8 @@ namespace Mylancentral {
                 private Vector2 Velocity { get; set; }
                 private Vector2 ScrollbackPosition { get; set; }
                 private Vector2 DisplaySize { get; set; }
+                private Rectangle DisplayRectangle { get; set; }
+                private Rectangle ScrollbackRectangle { get; set; }
 
                 public TextureElement(int id, Texture2D texture, Vector2 position) {
                     ID = id;
@@ -1500,6 +1531,7 @@ namespace Mylancentral {
                 public void Initialize() {
                     Velocity = new Vector2(0);
                     ScrollbackPosition = SetScrollbackVector();
+                    UpdateRectangles();
                 }
 
                 public void Update(GameTime gameTime) {
@@ -1538,12 +1570,16 @@ namespace Mylancentral {
                         }
 
                         ScrollbackPosition = SetScrollbackVector();
+
+                        UpdateRectangles();
                     }
                 }
 
                 public void Draw(SpriteBatch spriteBatch) {
-                    spriteBatch.Draw(Texture, Position, Color.White);
-                    spriteBatch.Draw(Texture, ScrollbackPosition, Color.White);
+                    spriteBatch.Draw(Texture, DisplayRectangle, Color.White);
+                    spriteBatch.Draw(Texture, ScrollbackRectangle, Color.White);
+                    //spriteBatch.Draw(Texture, Position, Color.White);
+                    //spriteBatch.Draw(Texture, ScrollbackPosition, Color.White);
                 }
 
                 public void Dispose() {
@@ -1556,11 +1592,11 @@ namespace Mylancentral {
 
                     switch (Scroll) {
                         case ScreenController.ScrollType.Left: {
-                                scrollback = new Vector2(-DisplaySize.X, 0);
+                                scrollback = new Vector2(DisplaySize.X, 0);
                                 break;
                             }
                         case ScreenController.ScrollType.Right: {
-                                scrollback = new Vector2(DisplaySize.X, 0);
+                                scrollback = new Vector2(-DisplaySize.X, 0);
                                 break;
                             }
                         case ScreenController.ScrollType.Up: {
@@ -1576,6 +1612,11 @@ namespace Mylancentral {
                     scrollback = Position + scrollback;
 
                     return scrollback;
+                }
+
+                private void UpdateRectangles() {
+                    DisplayRectangle = new Rectangle((int)Position.X, (int)Position.Y, (int)DisplaySize.X, (int)DisplaySize.Y);
+                    ScrollbackRectangle = new Rectangle((int)ScrollbackPosition.X, (int)ScrollbackPosition.Y, (int)DisplaySize.X, (int)DisplaySize.Y);
                 }
             }
             public class SoundElement : ScreenElement, IScreenElement {
