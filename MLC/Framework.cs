@@ -2,12 +2,12 @@
 using System.Linq;
 using System.Text;
 using System.Collections.Generic;
-using System.Xml.Linq;
-using System.Xml;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Content;
+using Microsoft.Xna.Framework.Audio;
+using Microsoft.Xna.Framework.Media;
 
 namespace Mylancentral {
     namespace Framework {
@@ -174,9 +174,7 @@ namespace Mylancentral {
 
             }
         }
-
-
-
+        
         /// <summary>
         /// Derivative Libary of Controls and Classes
         /// used to create and operate Dialog boxes and
@@ -1147,93 +1145,138 @@ namespace Mylancentral {
                 public readonly SpriteBatch SC_SpriteBatch;
                 public readonly ContentManager SC_Contentmanager;
                 private Action onGameExit;
-
-                private readonly List<IScreen> GameScreens = new List<IScreen>();
+                private bool IsScreenListEmpty {
+                    get {
+                        return Screens.Count <= 0;
+                    }
+                }
+                private readonly List<IScreen> Screens = new List<IScreen>();
+                private IScreen ActiveScreen;
 
                 public ScreenController(SpriteBatch spriteBatch, ContentManager content) {
                     SC_SpriteBatch = spriteBatch;
                     SC_Contentmanager = content;
+                    ActiveScreen = null;
                 }
 
-                private bool IsScreenListEmpty {
-                    get {
-                        return GameScreens.Count <= 0;
+                /// <summary>
+                /// Adds Screen to Screens List. If
+                /// no other Screens exist, the added
+                /// Screen becomes the Active Screen
+                /// </summary>
+                /// <param name="screen"></param>
+                public void AddScreen(IScreen screen) {
+                    if(Screens.Count == 0) {
+                        ActiveScreen = screen;
+                    }
+
+                    Screens.Add(screen);
+                }
+                
+                /// <summary>
+                /// Removes the ActiveScreen, Checks if another
+                /// exists at the top of the Screens list, and if so,
+                /// sets that as the Active Screen
+                /// </summary>
+                private void RemoveActiveScreen() {
+                    ActiveScreen.Dispose();
+                    Screens.Remove(ActiveScreen);
+
+                    if(Screens.Count > 0) {
+                        ActiveScreen = Screens.ElementAt(Screens.Count - 1);
                     }
                 }
-                private IScreen GetCurrentScreen() {
-                    return GameScreens.ElementAt(GameScreens.Count - 1);
-                }
-                private void RemoveCurrentScreen() {
-                    IScreen screen = (IScreen)GetCurrentScreen();
 
-                    screen.Dispose();
-
-                    GameScreens.Remove(screen);
-                }
+                /// <summary>
+                /// Empties the Screens list
+                /// </summary>
                 private void RemoveAllScreens() {
                     while (!IsScreenListEmpty) {
-                        RemoveCurrentScreen();
+                        RemoveActiveScreen();
                     }
                 }
-                public void ChangeBetweenScreens() {
+                public void ChangeBetweenScreens(IScreen screen) {
+                    if (MediaPlayer.State == MediaState.Playing) {
+                        MediaPlayer.Stop();
+                    }
+
+                    ActiveScreen.Pause();
                     
+                    if(Screens.Contains(screen) == false) {
+                        Screens.Add(screen);
+                        screen.Initialize();
+                    }
+
+                    ActiveScreen = screen;
                 }
                 public void ChangeScreen(IScreen screen) {
-                    RemoveAllScreens();
+                    if(ActiveScreen != null) {
+                        ActiveScreen.Pause();
+                    }
 
-                    GameScreens.Add(screen);
+                    if(Screens.Contains(screen) == false) {
+                        AddScreen(screen);
+                    }
 
-                    screen.Initialize();
+                    ActiveScreen = screen;
+                    ActiveScreen.Initialize();
+                    ActiveScreen.Resume();
                 }
+                /// <summary>
+                /// Pauses the Current Screen (if any) and places the
+                /// places the passed screen to active
+                /// </summary>
+                /// <param name="screen">Screen to Add to ScreenController and Display</param>
                 public void PushScreen(IScreen screen) {
-                    if (!IsScreenListEmpty) {
-                        IScreen curScreen = (IScreen)GetCurrentScreen();
-                        curScreen.Pause();
+                    if(MediaPlayer.State == MediaState.Playing) {
+                        MediaPlayer.Stop();
                     }
 
-                    GameScreens.Add(screen);
+                    if (!IsScreenListEmpty) {
+                        ActiveScreen.Pause();
+                    }
 
-                    screen.Initialize();
+                    if(Screens.Contains(screen) == false) {
+                        Screens.Add(screen);
+                        screen.Initialize();
+                    }
+
+                    ActiveScreen = screen;
                 }
+                /// <summary>
+                /// Removes the Active Screen, Checks for the
+                /// next screen in the list, and resumes that one
+                /// </summary>
                 public void PopScreen() {
-                    if (!IsScreenListEmpty) {
-                        RemoveCurrentScreen();
+                    if (MediaPlayer.State == MediaState.Playing) {
+                        MediaPlayer.Stop();
                     }
 
                     if (!IsScreenListEmpty) {
-                        IScreen screen = GetCurrentScreen();
+                        RemoveActiveScreen();
+                    }
+
+                    if (!IsScreenListEmpty) {
+                        IScreen screen = Screens.ElementAt(Screens.Count - 1);
                         screen.Resume();
                     }
                 }
+                /// <summary>
+                /// Runs Update for Active Screen if it is not paused
+                /// </summary>
+                /// <param name="gameTime"></param>
                 public void Update(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
-                        IScreen screen = GetCurrentScreen();
-
-                        if(screen.IsScreenPaused() == false) {
-                            screen.Update(gameTime);
-                        }
+                        ActiveScreen.Update(gameTime);
                     }
                 }
                 public void Draw(GameTime gameTime) {
                     if (!IsScreenListEmpty) {
-                        IScreen screen = GetCurrentScreen();
-
                         SC_SpriteBatch.Begin();
-
-                        if (screen.IsScreenPaused() == false) {
-                            screen.Draw(SC_SpriteBatch);
-                        }
+                        
+                        ActiveScreen.Draw(SC_SpriteBatch);
 
                         SC_SpriteBatch.End();
-                    }
-                }
-                public void HandleInput(GameTime gameTime) {
-                    if (!IsScreenListEmpty) {
-                        IScreen screen = GetCurrentScreen();
-
-                        if(screen.IsScreenPaused() == false) {
-                            screen.HandleInput(gameTime);
-                        }
                     }
                 }
                 public void Exit() {
@@ -1273,85 +1316,205 @@ namespace Mylancentral {
                     remove { onGameExit -= value; }
                 }
             }
-
-            public interface IScreen : IDisposable {
+            public interface IView : IDisposable {
                 void Initialize();
-
-                void Pause();
-                void Resume();
-                bool IsScreenPaused();
-
-                void HandleInput(GameTime gameTime);
                 void Update(GameTime gameTime);
                 void Draw(SpriteBatch spriteBatch);
 
-                void AddElement(IScreenElement element);
+                void Pause();
+                void Resume();
+                bool IsPaused();
+
+                void ListCleanup();
+            }
+
+            /* Screens */
+            public interface IScreen : IView {
+                void AddLayer(ILayer layer);
+                void RemoveLayer(ILayer layer);
+                void RemoveLayer(Layer layer);
+                void RemoveLayer(int id);
             }
             public class Screen : IScreen {
                 public int ID { get; protected set; }
                 public Vector2 ViewSize { get; protected set; }
-                public bool IsPaused { get; protected set; }
-                public List<IScreenElement> Elements { get; protected set; }
+                public bool Paused { get; protected set; }
+                public bool DestroyMe { get; protected set; }
+                
+                public List<ILayer> Layers { get; protected set; }
 
                 public Screen(int id, Vector2 size) {
                     ID = id;
                     ViewSize = size;
 
                     Resume();
-                    Elements = new List<IScreenElement>();
+                    Layers = new List<ILayer>();
                 }
 
-                public void Pause() {
-                    IsPaused = true;
-                }
+                public Screen(int id, Vector2 size, List<ILayer> layers) {
+                    ID = id;
+                    ViewSize = size;
 
-                public void Resume() {
-                    IsPaused = false;
-                }
-
-                public bool IsScreenPaused() {
-                    return IsPaused;
-                }
-
-                public void AddElement(IScreenElement element) {
-                    Elements.Add(element);
+                    Resume();
+                    Layers = new List<ILayer>(layers);
                 }
 
                 public void Initialize() {
-                    foreach (IScreenElement element in Elements) {
-                        element.Initialize();
+                    foreach (ILayer layer in Layers) {
+                        layer.Initialize();
                     }
                 }
 
                 public void Update(GameTime gameTime) {
-                    foreach (IScreenElement element in Elements) {
-                        element.Update(gameTime);
+                    foreach (ILayer layer in Layers) {
+                        layer.Update(gameTime);
                     }
-                }
 
-                public void HandleInput(GameTime gameTime) {
-                    
+                    ListCleanup();
                 }
 
                 public void Draw(SpriteBatch spriteBatch) {
-                    foreach (IScreenElement element in Elements) {
+                    for(int i = 0; i <= Layers.Count - 1; i++) {
+                        Layer layer = Layers.ElementAt(i) as Layer;
+
+                        layer.Draw(spriteBatch);
+                    }
+                }
+
+                public void Pause() {
+                    Paused = true;
+                }
+                public void Resume() {
+                    Paused = false;
+                }
+                public bool IsPaused() {
+                    return Paused;
+                }
+
+                public void Dispose() {
+                    foreach(ILayer ilayer in Layers) {
+                        Layer layer = ilayer as Layer;
+
+                        layer.Dispose();
+                    }
+
+                    ListCleanup();
+
+                    DestroyMe = true;
+                }
+
+                public void AddLayer(ILayer layer) {
+                    Layers.Add(layer);
+                }
+
+                public void RemoveLayer(ILayer layer) {
+                    Layer toRemove = layer as Layer;
+
+                    toRemove.Dispose();
+                }
+                public void RemoveLayer(Layer layer) {
+                    layer.Dispose();
+                }
+                public void RemoveLayer(int id) {
+                    Layer toDispose = null;
+
+                    foreach(Layer layer in Layers) {
+                        if(layer.ID == id) {
+                            toDispose = layer;
+                        }
+                    }
+
+                    if(toDispose != null) {
+                        toDispose.Dispose();
+                    }
+                }
+
+                public void ListCleanup() {
+                    for(int i = Layers.Count - 1; i >= 0; i--) {
+                        Layer layer = Layers.ElementAt(i) as Layer;
+
+                        if(layer.DestroyMe == true) {
+                            Layers.Remove(layer);
+                        }
+                    }
+                }
+            }
+
+            /* Layers */
+            public interface ILayer : IView {
+                void AddElement(ILayerElement element);
+            }
+            public class Layer : ILayer {
+                public int ID { get; protected set; }
+                public Vector2 ViewSize { get; protected set; }
+                public bool Paused { get; protected set; }
+                public bool DestroyMe { get; protected set; }
+                public List<ILayerElement> Elements { get; protected set; }
+
+                public Layer(int id, Vector2 size) {
+                    
+
+                    Elements = new List<ILayerElement>();
+                }
+
+                public void Initialize() {
+                    foreach (ILayerElement element in Elements) {
+                        element.Initialize();
+                    }
+                }
+                public void Update(GameTime gameTime) {
+                    foreach (ILayerElement element in Elements) {
+                        element.Update(gameTime);
+                    }
+                }
+                public void Draw(SpriteBatch spriteBatch) {
+                    foreach (ILayerElement element in Elements) {
                         element.Draw(spriteBatch);
                     }
                 }
 
-                public void Dispose() {
-                    for (int i = Elements.Count - 1; i >= 0; i--) {
-                        Elements.RemoveAt(i);
+                public void Pause() {
+                    Paused = true;
+                }
+                public void Resume() {
+                    Paused = false;
+                }
+                public bool IsPaused() {
+                    return Paused;
+                }
+
+                public void AddElement(ILayerElement element) {
+                    Elements.Add(element);
+                }
+
+                public void ListCleanup() {
+                    for(int i = Elements.Count - 1; i >= 0; i--) {
+                        LayerElement e = Elements.ElementAt(i) as LayerElement;
+
+                        if(e.DestroyMe == true) {
+                            Elements.RemoveAt(i);
+                        }
                     }
+                }
+
+                public void Dispose() {
+                    foreach(ILayerElement element in Elements) {
+                        element.Dispose();
+                    }
+
+                    ListCleanup();
+
+                    DestroyMe = true;
                 }
             }
 
-            public interface IScreenElement : IDisposable {
+            /* Layer Elements */
+            public interface ILayerElement : IDisposable {
                 void Initialize();
                 void Draw(SpriteBatch spriteBatch);
                 void Update(GameTime gameTime);
             }
-            public abstract class ScreenElement {
+            public abstract class LayerElement {
                 public int ID { get; protected set; }
                 public Vector2 Position { get; protected set; }
                 public bool Visible { get; protected set; }
@@ -1360,6 +1523,7 @@ namespace Mylancentral {
                 protected float Timer { get; set; }
                 protected float TimerReset { get; set; }
                 protected bool Initialized { get; set; }
+                public bool DestroyMe { get; protected set; }
 
                 protected void ProcessTimers(GameTime gameTime) {
                     if(Timer > 0) {
@@ -1388,7 +1552,7 @@ namespace Mylancentral {
                     Timer = TimerReset;
                 }
             }
-            public class TextElement : ScreenElement, IScreenElement {
+            public class TextElement : LayerElement, ILayerElement {
                 public string Text { get; protected set; }
                 private SpriteFont Font { get; set; }
                 private Vector2 DrawPosition { get; set; }
@@ -1443,6 +1607,7 @@ namespace Mylancentral {
                 public void Initialize() {
                     Show();
                     SetDrawPosition();
+                    DestroyMe = false;
                     Initialized = true;
                 }
 
@@ -1456,7 +1621,7 @@ namespace Mylancentral {
                 }
 
                 public void Dispose() {
-
+                    DestroyMe = true;
                 }
 
                 /// <summary>
@@ -1496,7 +1661,7 @@ namespace Mylancentral {
                     }
                 }
             }
-            public class TextureElement : ScreenElement, IScreenElement {
+            public class TextureElement : LayerElement, ILayerElement {
                 private Texture2D Texture { get; set; }
                 private ScreenController.ScrollType Scroll { get; set; }
                 private float ScrollRate { get; set; }
@@ -1506,10 +1671,11 @@ namespace Mylancentral {
                 private Rectangle DisplayRectangle { get; set; }
                 private Rectangle ScrollbackRectangle { get; set; }
 
-                public TextureElement(int id, Texture2D texture, Vector2 position) {
+                public TextureElement(int id, Texture2D texture, Vector2 position, Vector2 displaysize) {
                     ID = id;
                     Texture = texture;
                     Position = position;
+                    DisplaySize = displaysize;
                     Scroll = ScreenController.ScrollType.None;
                     ScrollRate = 0f;
 
@@ -1531,6 +1697,7 @@ namespace Mylancentral {
                 public void Initialize() {
                     Velocity = new Vector2(0);
                     ScrollbackPosition = SetScrollbackVector();
+                    DestroyMe = false;
                     UpdateRectangles();
                 }
 
@@ -1578,12 +1745,11 @@ namespace Mylancentral {
                 public void Draw(SpriteBatch spriteBatch) {
                     spriteBatch.Draw(Texture, DisplayRectangle, Color.White);
                     spriteBatch.Draw(Texture, ScrollbackRectangle, Color.White);
-                    //spriteBatch.Draw(Texture, Position, Color.White);
-                    //spriteBatch.Draw(Texture, ScrollbackPosition, Color.White);
                 }
 
                 public void Dispose() {
-
+                    Texture.Dispose();
+                    DestroyMe = true;
                 }
 
                 /* Methods */
@@ -1618,46 +1784,80 @@ namespace Mylancentral {
                     DisplayRectangle = new Rectangle((int)Position.X, (int)Position.Y, (int)DisplaySize.X, (int)DisplaySize.Y);
                     ScrollbackRectangle = new Rectangle((int)ScrollbackPosition.X, (int)ScrollbackPosition.Y, (int)DisplaySize.X, (int)DisplaySize.Y);
                 }
-            }
-            public class SoundElement : ScreenElement, IScreenElement {
 
+                public void UnloadContent(ContentManager content) {
+                    
+                }
+            }
+            public class SoundElement : LayerElement, ILayerElement {
+                private SoundEffectInstance Sound { get; set; }
+                private float Volume { get; set; }
+                private bool Looping { get; set; }
+
+                public SoundElement(int id, SoundEffectInstance sound, float volume, bool looping) {
+                    ID = id;
+                    Sound = sound;
+                    Volume = volume;
+                    Looping = looping;
+                    Sound.IsLooped = Looping;
+                }
 
                 public void Initialize() {
+                    DestroyMe = false;
                 }
 
                 public void Update(GameTime gameTime) {
-                    ProcessTimers(gameTime);
-
+                    if(Sound.State == SoundState.Stopped) {
+                        Sound.Volume = Volume;
+                        Sound.Play();
+                    }
                 }
 
                 public void Draw(SpriteBatch spriteBatch) {
-
+                    return;
                 }
 
                 public void Dispose() {
-
+                    Sound.Dispose();
+                    DestroyMe = true;
                 }
             }
-            public class MusicElement : ScreenElement, IScreenElement {
+            public class MusicElement : LayerElement, ILayerElement {
+                private Song Music { get; set; }
+                private float Volume { get; set; }
+                private bool Looping { get; set; }
 
+                public MusicElement(int id, Song music, float volume, bool looping) {
+                    ID = id;
+                    Volume = volume;
+                    Looping = looping;
+                    Music = music;
+                }
 
                 public void Initialize() {
+                    
                 }
 
                 public void Update(GameTime gameTime) {
-                    ProcessTimers(gameTime);
-
+                    if (MediaPlayer.State == MediaState.Stopped) {
+                        MediaPlayer.Volume = Volume;
+                        MediaPlayer.Play(Music);
+                    }
                 }
 
                 public void Draw(SpriteBatch spriteBatch) {
-
+                    return;
                 }
 
                 public void Dispose() {
+                    if(MediaPlayer.State == MediaState.Playing) {
+                        MediaPlayer.Stop();
+                    }
 
+                    Music.Dispose();
                 }
             }
-            public class EntityElement : ScreenElement, IScreenElement {
+            public class EntityElement : LayerElement, ILayerElement {
                 public IEntity Element { get; protected set; }
 
                 public EntityElement(IEntity entity) {
@@ -1678,9 +1878,10 @@ namespace Mylancentral {
 
                 public void Dispose() {
                     Element.Dispose();
+                    DestroyMe = true;
                 }
             }
-            public class MenuElement : ScreenElement, IScreenElement {
+            public class MenuElement : LayerElement, ILayerElement {
                 protected List<MenuItem> Items { get; private set; }
                 private int CurrentItem { get; set; }
                 private int LastItem { get; set; }
