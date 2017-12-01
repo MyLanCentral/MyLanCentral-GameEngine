@@ -1,0 +1,36 @@
+MLC Game Framework Changelog
+
+Version 0.2.120117
+
+Major Changes
+	-- ScreenEngine
+		- The heirarchy of the ScreenEngine has been changed.  Now from the top-down it goes like so:
+			ScreenController handles Screens; Screens handle Layers; Layers handle Elements.  This allows
+			for redefinition of what a screen is.  Previously, Screens were all-encompassing.  Now, screens
+			can be created, paused, resumed, left, and returned to.  Layers defined what is on the screen
+			and in what order.  An example would be to have three screens: Title, Gameplay, and EndCard.
+			Title has two layers: Background and Foreground. Gameplay has Background, Entities, and Foreground
+			Layers.  EndCard has Background and Foreground Layers.  This way, we can simply change the
+			Elements contained on the Layers of a screen, but keep the screen active.  Previously, changing
+			elements on the Screen would often result in Elements not being rendered in the proper order.
+		- The ScreenController no longer uses the last Screen in the Screens list to determine which screen
+			to render and process.  It instead now has an ActiveScreen, which can be altered via ChangeScreen(), 
+			PushScreen(), and PopScreen().  These work like so:
+			
+				ChangeScreen(IScreen screen): Changes directly to the Specified Screen. Checks if the specified
+					screen is in the ScreenController's list, adding it if not.  This will Pause any ActiveScreen,
+					if one is currently in play.  For the most part, this is the method to use to change between
+					screens.
+				PushScreen(IScreen screen): Places the currently ActiveScreen on Pause and pushes the specified
+					screen into ActiveScreen.  This will also add the specified screen to the Screens list, if it
+					is not already there.  This places the previous screen on reserve.
+				PopScreen(): Disposes the current ActiveScreen and returns to the previously Paused screen.  This only
+					works properly when PushScreen() is used prior.
+				
+		- ChangeBetweenScreens() has been deprecated
+		- MusicElement and SoundElement have been defined and are now usable.
+			- MusicElement is a container for MP3's and other MediaPlayer-required audio files.
+				- Accepted formats from Content: .mp3, .wma
+			- SoundElement is a container for WAV's and other standalone audio files.
+				- Accepted formats from Content: .wav, .xap
+		
